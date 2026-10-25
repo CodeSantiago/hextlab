@@ -1,0 +1,32 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node / Vite
+playground/node_modules/
+playground/dist/
+playground/.vite/
+*.tsbuildinfo
+
+# Local data (contains API keys)
+.data/
+.atl/
+
+# Environment files
+.env
+.env.*
+!.env.example
+playground/.env
+playground/.env.*
+!playground/.env.example
+
+# Logs and OS/IDE noise
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
