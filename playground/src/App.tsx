@@ -2,6 +2,8 @@ import { MarkerType, useEdgesState, useNodesState } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "./components/Canvas";
 import { NodeInspector } from "./components/NodeInspector";
+import { ProjectsSidebar } from "./components/ProjectsSidebar";
+import { RubricsModal } from "./components/RubricsModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { TracePanel } from "./components/TracePanel";
 import {
@@ -12,8 +14,10 @@ import {
   MAX_ITERATIONS,
   MOCK_PROVIDER_ID,
   STORAGE_KEYS,
+  loopLevelForIterations,
 } from "./config";
 import { defaultFlowEdges, defaultFlowNodes } from "./data/flow";
+import { RUBRIC_TEMPLATES } from "./data/rubrics";
 import {
   checkHostHealth,
   deleteHostAgent,
@@ -22,6 +26,8 @@ import {
   syncFlowAgents,
   upsertHostAgent,
 } from "./lib/host";
+import { createProject, loadWorkspace, saveWorkspace } from "./lib/projects";
+import { applyRubricToNodes } from "./lib/rubrics";
 import { executeFlow } from "./lib/runner";
 import type {
   AgentCard,
@@ -32,9 +38,11 @@ import type {
   FlowNodeData,
   NodeKind,
   Pricing,
+  Project,
   Provider,
   ProviderKind,
   ProviderPreset,
+  Rubric,
   RunResult,
   RunState,
   TraceStep,
@@ -51,24 +59,10 @@ const FALLBACK_MOCK_PROVIDER: Provider = {
   builtin: true,
 };
 
-function loadSavedFlow(): { nodes: FlowNode[]; edges: FlowEdge[] } {
-  try {
-    const raw =
-      localStorage.getItem(STORAGE_KEYS.flow) ??
-      localStorage.getItem(LEGACY_STORAGE_KEYS.flow);
-    if (!raw) return { nodes: defaultFlowNodes, edges: defaultFlowEdges };
-    const parsed = JSON.parse(raw) as {
-      nodes?: FlowNode[];
-      edges?: FlowEdge[];
-    };
-    if (Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
-      return { nodes: parsed.nodes, edges: parsed.edges };
-    }
-  } catch {
-    // ignore
-  }
-  return { nodes: defaultFlowNodes, edges: defaultFlowEdges };
-}
+const PREVIOUS_DEFAULT_PRICING: Pricing = {
+  inputPer1K: 0.003,
+  outputPer1K: 0.006,
+};
 
 function loadSavedPricing(): Pricing {
   try {
@@ -81,6 +75,12 @@ function loadSavedPricing(): Pricing {
       typeof parsed.inputPer1K === "number" &&
       typeof parsed.outputPer1K === "number"
     ) {
+      if (
+        parsed.inputPer1K === PREVIOUS_DEFAULT_PRICING.inputPer1K &&
+        parsed.outputPer1K === PREVIOUS_DEFAULT_PRICING.outputPer1K
+      ) {
+        return DEFAULT_PRICING;
+      }
       return {
         inputPer1K: parsed.inputPer1K,
         outputPer1K: parsed.outputPer1K,
@@ -93,14 +93,31 @@ function loadSavedPricing(): Pricing {
 }
 
 export default function App() {
-  const initialFlow = useMemo(() => loadSavedFlow(), []);
+  const initialWorkspace = useMemo(() => loadWorkspace(), []);
+  const initialProject = useMemo(
+    () =>
+      initialWorkspace.projects.find(
+        (project) => project.id === initialWorkspace.activeProjectId,
+      ) ?? initialWorkspace.projects[0],
+    [initialWorkspace],
+  );
+  const [projects, setProjects] = useState<Project[]>(
+    initialWorkspace.projects,
+  );
+  const [customRubrics, setCustomRubrics] = useState<Rubric[]>(
+    initialWorkspace.rubrics,
+  );
+  const [activeProjectId, setActiveProjectId] = useState(
+    initialWorkspace.activeProjectId,
+  );
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(
-    initialFlow.nodes,
+    initialProject.nodes,
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdge>(
-    initialFlow.edges,
+    initialProject.edges,
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [rubricsOpen, setRubricsOpen] = useState(false);
 
   const [hostOnline, setHostOnline] = useState<boolean | null>(null);
   const [providers, setProviders] = useState<Provider[]>([
@@ -132,6 +149,25 @@ export default function App() {
   const running = runState === "running";
   const runAbortRef = useRef<AbortController | null>(null);
 
+  const activeProject = useMemo(
+    () =>
+      projects.find((project) => project.id === activeProjectId) ?? projects[0],
+    [projects, activeProjectId],
+  );
+
+  const activeRubric = useMemo(() => {
+    const rubricId = activeProject?.rubricId;
+    if (!rubricId) return undefined;
+    return [...RUBRIC_TEMPLATES, ...customRubrics].find(
+      (rubric) => rubric.id === rubricId,
+    );
+  }, [activeProject, customRubrics]);
+
+  const runNodes = useMemo(
+    () => applyRubricToNodes(nodes, activeRubric),
+    [nodes, activeRubric],
+  );
+
   const refreshHost = useCallback(async () => {
     const ok = await checkHostHealth();
     setHostOnline(ok);
@@ -143,11 +179,11 @@ export default function App() {
       ]);
       setProviders(loadedProviders);
       setPresets(loadedPresets);
-      await syncFlowAgents(nodes);
+      await syncFlowAgents(runNodes);
     } catch {
       // ignore
     }
-  }, [nodes]);
+  }, [runNodes]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -160,6 +196,7 @@ export default function App() {
       if (e.key === "Escape") {
         setSelectedNodeId(null);
         setSettingsOpen(false);
+        setRubricsOpen(false);
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -167,12 +204,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.flow, JSON.stringify({ nodes, edges }));
-    } catch {
-      // ignore
-    }
-  }, [nodes, edges]);
+    const merged = projects.map((project) =>
+      project.id === activeProjectId ? { ...project, nodes, edges } : project,
+    );
+    saveWorkspace({
+      projects: merged,
+      activeProjectId,
+      rubrics: customRubrics,
+    });
+  }, [nodes, edges, projects, activeProjectId, customRubrics]);
 
   useEffect(() => {
     try {
@@ -211,6 +251,17 @@ export default function App() {
           input: DEFAULT_TOPIC,
         },
       };
+    } else if (kind === "blank") {
+      newNode = {
+        id,
+        type: "blank",
+        position: { x: xBase, y: yBase },
+        data: {
+          kind: "blank",
+          name: `Nodo vacío ${countOfKind > 1 ? countOfKind : ""}`.trim(),
+          note: "",
+        },
+      };
     } else {
       const isWriter = kind === "writer";
       const data: AgentData = {
@@ -234,47 +285,43 @@ export default function App() {
       }
     }
 
-    setNodes((prev) => {
-      const updated = [...prev, newNode];
-      if (prev.length > 0 && kind !== "trigger") {
-        const last = prev[prev.length - 1];
-        setEdges((eds) => {
-          const nextEdges: FlowEdge[] = [
-            ...eds,
-            {
-              id: `e-${last.id}-${id}`,
-              source: last.id,
-              sourceHandle: "out",
-              target: id,
-              targetHandle: "in",
-              markerEnd: {
-                type: MarkerType.ArrowClosed,
-                width: 16,
-                height: 16,
-              },
-            },
-          ];
-          if (kind === "critic" && last.data.kind === "writer") {
-            nextEdges.push({
-              id: `e-${id}-${last.id}-loop`,
-              source: id,
-              sourceHandle: "loop-out",
-              target: last.id,
-              targetHandle: "loop-in",
-              label: "rehacer",
-              type: "smoothstep",
-              markerEnd: {
-                type: MarkerType.ArrowClosed,
-                width: 16,
-                height: 16,
-              },
-            });
-          }
-          return nextEdges;
+    const last = nodes[nodes.length - 1];
+    const nextEdges: FlowEdge[] = [...edges];
+    if (last && (kind === "writer" || kind === "critic")) {
+      nextEdges.push({
+        id: `e-${last.id}-${id}`,
+        source: last.id,
+        sourceHandle: "out",
+        target: id,
+        targetHandle: "in",
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 16,
+          height: 16,
+        },
+      });
+      if (kind === "critic" && last.data.kind === "writer") {
+        nextEdges.push({
+          id: `e-${id}-${last.id}-loop`,
+          source: id,
+          sourceHandle: "loop-out",
+          target: last.id,
+          targetHandle: "loop-in",
+          label: "rehacer",
+          type: "smoothstep",
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 16,
+            height: 16,
+          },
         });
       }
-      return updated;
-    });
+    }
+
+    setNodes([...nodes, newNode]);
+    if (nextEdges.length !== edges.length) {
+      setEdges(nextEdges);
+    }
     setSelectedNodeId(id);
   }
 
@@ -311,13 +358,13 @@ export default function App() {
     setStatuses({});
     setSelectedNodeId(null);
     if (hostOnline) {
-      void syncFlowAgents(defaultFlowNodes);
+      void syncFlowAgents(applyRubricToNodes(defaultFlowNodes, activeRubric));
     }
   }
 
   function handleClearCanvas() {
     for (const node of nodes) {
-      if (node.data.kind !== "trigger") {
+      if (node.data.kind === "writer" || node.data.kind === "critic") {
         void deleteHostAgent(node.id);
       }
     }
@@ -325,6 +372,135 @@ export default function App() {
     setEdges([]);
     setStatuses({});
     setSelectedNodeId(null);
+  }
+
+  function resetProjectSession() {
+    setStatuses({});
+    setCards({});
+    setSteps([]);
+    setRunState("idle");
+    setRunMessage("");
+    setIteration(0);
+    setLastRun(null);
+    setPreviousRun(null);
+    setSelectedNodeId(null);
+  }
+
+  function snapshotActiveProject(list: Project[]): Project[] {
+    return list.map((project) =>
+      project.id === activeProjectId
+        ? { ...project, nodes, edges, updatedAt: Date.now() }
+        : project,
+    );
+  }
+
+  function handleSelectProject(projectId: string) {
+    if (running || projectId === activeProjectId) return;
+    const target = projects.find((project) => project.id === projectId);
+    if (!target) return;
+    const synced = snapshotActiveProject(projects);
+    setProjects(synced);
+    setActiveProjectId(projectId);
+    setNodes(target.nodes);
+    setEdges(target.edges);
+    resetProjectSession();
+  }
+
+  function handleCreateProject() {
+    if (running) return;
+    const project = createProject(`Proyecto ${projects.length + 1}`);
+    setProjects([...snapshotActiveProject(projects), project]);
+    setActiveProjectId(project.id);
+    setNodes([]);
+    setEdges([]);
+    resetProjectSession();
+  }
+
+  function handleRenameProject(projectId: string, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setProjects(
+      snapshotActiveProject(projects).map((project) =>
+        project.id === projectId
+          ? { ...project, name: trimmed, updatedAt: Date.now() }
+          : project,
+      ),
+    );
+  }
+
+  function handleDeleteProject(projectId: string) {
+    if (running) return;
+    const target = projects.find((project) => project.id === projectId);
+    if (!target) return;
+    if (
+      !window.confirm(
+        `¿Eliminar el proyecto "${target.name}"? Esta acción no se puede deshacer.`,
+      )
+    ) {
+      return;
+    }
+
+    for (const node of target.nodes) {
+      if (node.data.kind === "writer" || node.data.kind === "critic") {
+        void deleteHostAgent(node.id);
+      }
+    }
+
+    const remaining = snapshotActiveProject(projects).filter(
+      (project) => project.id !== projectId,
+    );
+    if (remaining.length === 0) {
+      const fresh = createProject("Proyecto 1");
+      setProjects([fresh]);
+      setActiveProjectId(fresh.id);
+      setNodes([]);
+      setEdges([]);
+      resetProjectSession();
+      return;
+    }
+
+    setProjects(remaining);
+    if (projectId === activeProjectId) {
+      const next = remaining[0];
+      setActiveProjectId(next.id);
+      setNodes(next.nodes);
+      setEdges(next.edges);
+      resetProjectSession();
+    }
+  }
+
+  function handleApplyRubric(rubricId: string | null) {
+    setProjects(
+      snapshotActiveProject(projects).map((project) =>
+        project.id === activeProjectId
+          ? { ...project, rubricId, updatedAt: Date.now() }
+          : project,
+      ),
+    );
+  }
+
+  function handleSaveRubric(rubric: Rubric) {
+    setCustomRubrics((prev) => {
+      const exists = prev.some((item) => item.id === rubric.id);
+      if (exists) {
+        return prev.map((item) => (item.id === rubric.id ? rubric : item));
+      }
+      return [...prev, rubric];
+    });
+  }
+
+  function handleDeleteRubric(rubricId: string) {
+    const rubric = customRubrics.find((item) => item.id === rubricId);
+    if (!rubric) return;
+    if (!window.confirm(`¿Eliminar la rúbrica "${rubric.name}"?`)) return;
+    setCustomRubrics((prev) => prev.filter((item) => item.id !== rubricId));
+    setProjects((prev) =>
+      prev.map((project) =>
+        project.rubricId === rubricId
+          ? { ...project, rubricId: null, updatedAt: Date.now() }
+          : project,
+      ),
+    );
   }
 
   async function handleRunFlow() {
@@ -342,7 +518,7 @@ export default function App() {
 
     try {
       const result = await executeFlow({
-        nodes,
+        nodes: runNodes,
         edges,
         maxIterations,
         pricing,
@@ -390,12 +566,15 @@ export default function App() {
       <header className="topbar">
         <div className="topbar-left">
           <span className="topbar-title">HextLab</span>
+          <span className="topbar-project">/ {activeProject.name}</span>
 
           {(running || runMessage) && (
             <span
               className={`run-status-inline ${running ? "running" : runState}`}
             >
-              {running ? `iter ${iteration}/${maxIterations}…` : runMessage}
+              {running
+                ? `Intento ${iteration} · nivel ${loopLevelForIterations(maxIterations).label}…`
+                : runMessage}
             </span>
           )}
         </div>
@@ -448,8 +627,22 @@ export default function App() {
 
       {/* Full-bleed Stage */}
       <div className="stage">
+        <ProjectsSidebar
+          projects={projects}
+          activeProjectId={activeProject.id}
+          activeNodeCount={nodes.length}
+          activeRubricName={activeRubric?.name}
+          running={running}
+          onSelectProject={handleSelectProject}
+          onCreateProject={handleCreateProject}
+          onRenameProject={handleRenameProject}
+          onDeleteProject={handleDeleteProject}
+          onOpenRubrics={() => setRubricsOpen(true)}
+        />
+
         <div className="stage-canvas">
           <Canvas
+            flowKey={activeProject.id}
             nodes={nodes}
             edges={edges}
             statuses={statuses}
@@ -491,6 +684,19 @@ export default function App() {
           />
         )}
       </div>
+
+      {rubricsOpen && (
+        <RubricsModal
+          open
+          projectName={activeProject.name}
+          activeRubricId={activeProject.rubricId}
+          rubrics={customRubrics}
+          onClose={() => setRubricsOpen(false)}
+          onApply={handleApplyRubric}
+          onSave={handleSaveRubric}
+          onDelete={handleDeleteRubric}
+        />
+      )}
 
       <SettingsModal
         open={settingsOpen}

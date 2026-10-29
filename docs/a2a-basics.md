@@ -27,7 +27,7 @@ Ejemplo real del escritor (`writer-1`):
   "description": "Genera un borrador a partir de un pedido o reescribe uno con observaciones.",
   "url": "http://localhost:8000/agents/writer-1/",
   "preferredTransport": "JSONRPC",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "capabilities": {
     "streaming": false,
     "pushNotifications": false,
@@ -52,7 +52,7 @@ Campos importantes:
 - `url`: endpoint JSON-RPC del agente. En este proyecto es `POST /agents/{id}/`.
 - `preferredTransport`: `JSONRPC` en ambos roles.
 - `capabilities.streaming`: `false`; no hay SSE.
-- `version`: versión del producto (`0.1.0`), no del protocolo.
+- `version`: versión del producto (`0.2.0`), no del protocolo.
 - `protocolVersion`: `0.3.0`.
 - `skills`: lo que el agente sabe hacer. El playground muestra `name` e `id`.
 

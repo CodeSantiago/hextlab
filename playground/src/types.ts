@@ -14,7 +14,7 @@ export type TaskState =
 // --- Grafo -----------------------------------------------------------------
 
 export type AgentRole = "writer" | "critic";
-export type NodeKind = "trigger" | AgentRole;
+export type NodeKind = "trigger" | AgentRole | "blank";
 
 export type TriggerData = {
   kind: "trigger";
@@ -31,7 +31,13 @@ export type AgentData = {
   temperature: number | null;
 };
 
-export type FlowNodeData = TriggerData | AgentData;
+export type BlankData = {
+  kind: "blank";
+  name: string;
+  note: string;
+};
+
+export type FlowNodeData = TriggerData | AgentData | BlankData;
 export type FlowNode = Node<FlowNodeData, NodeKind>;
 export type FlowEdge = Edge;
 
@@ -40,6 +46,39 @@ export type RenderExtras = {
   status: AgentStatus;
   providerName?: string;
   agentUrl?: string;
+};
+
+// --- Proyectos y rúbricas --------------------------------------------------
+
+export type RubricCriterion = {
+  id: string;
+  name: string;
+  description: string;
+  weight: number;
+};
+
+export type Rubric = {
+  id: string;
+  name: string;
+  description: string;
+  criteria: RubricCriterion[];
+  builtin: boolean;
+};
+
+export type Project = {
+  id: string;
+  name: string;
+  rubricId: string | null;
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type WorkspaceState = {
+  projects: Project[];
+  activeProjectId: string;
+  rubrics: Rubric[];
 };
 
 // --- Proveedores -----------------------------------------------------------
@@ -140,6 +179,8 @@ export interface ReviewData {
 
 // --- Ejecución -------------------------------------------------------------
 
+export type CostSource = "provider" | "catalog" | "local" | "manual";
+
 export interface TraceStep {
   id: string;
   nodeId: string;
@@ -159,9 +200,13 @@ export interface TraceStep {
   error?: string;
   tokensInput: number;
   tokensOutput: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
   serverLatencyMs: number;
   clientLatencyMs: number;
   cost: number;
+  costSource: CostSource;
   estimated: boolean;
   timestamp: string;
 }

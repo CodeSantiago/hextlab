@@ -244,10 +244,18 @@ def chat_completion(
             text = "".join(
                 block.get("text", "") for block in data.get("content", []) if block.get("type") == "text"
             )
+            uncached_input = int(usage.get("input_tokens", 0) or 0)
+            cache_read = int(usage.get("cache_read_input_tokens", 0) or 0)
+            cache_write = int(usage.get("cache_creation_input_tokens", 0) or 0)
             return {
                 "text": text,
-                "tokensInput": int(usage.get("input_tokens", 0)),
-                "tokensOutput": int(usage.get("output_tokens", 0)),
+                "tokensInput": uncached_input + cache_read + cache_write,
+                "tokensOutput": int(usage.get("output_tokens", 0) or 0),
+                "uncachedInputTokens": uncached_input,
+                "cacheReadTokens": cache_read,
+                "cacheWriteTokens": cache_write,
+                "reasoningTokens": 0,
+                "reportedCostUsd": None,
             }
 
         if dialect == "responses":
@@ -275,10 +283,21 @@ def chat_completion(
                 for part in item.get("content", [])
                 if part.get("type") == "output_text"
             )
+            input_details = usage.get("input_tokens_details") or {}
+            output_details = usage.get("output_tokens_details") or {}
+            input_total = int(usage.get("input_tokens", 0) or 0)
+            cached = int(input_details.get("cached_tokens", 0) or 0)
             return {
                 "text": text,
-                "tokensInput": int(usage.get("input_tokens", 0)),
-                "tokensOutput": int(usage.get("output_tokens", 0)),
+                "tokensInput": input_total,
+                "tokensOutput": int(usage.get("output_tokens", 0) or 0),
+                "uncachedInputTokens": max(0, input_total - cached),
+                "cacheReadTokens": cached,
+                "cacheWriteTokens": 0,
+                "reasoningTokens": int(
+                    output_details.get("reasoning_tokens", 0) or 0
+                ),
+                "reportedCostUsd": None,
             }
 
         body = {
@@ -302,10 +321,34 @@ def chat_completion(
             raise LLMError(
                 f"{provider.get('name')} devolvió una respuesta inesperada."
             ) from exc
+
+        prompt_details = usage.get("prompt_tokens_details") or {}
+        completion_details = usage.get("completion_tokens_details") or {}
+        input_total = int(usage.get("prompt_tokens", 0) or 0)
+        cached = int(prompt_details.get("cached_tokens", 0) or 0)
+        cache_write = int(prompt_details.get("cache_write_tokens", 0) or 0)
+        reported_cost = None
+        if "cost" in usage:
+            reported_cost = float(usage.get("cost") or 0.0)
+            upstream = float(
+                (usage.get("cost_details") or {}).get(
+                    "upstream_inference_cost", 0.0
+                )
+                or 0.0
+            )
+            reported_cost += upstream
+
         return {
             "text": text,
-            "tokensInput": int(usage.get("prompt_tokens", 0)),
-            "tokensOutput": int(usage.get("completion_tokens", 0)),
+            "tokensInput": input_total,
+            "tokensOutput": int(usage.get("completion_tokens", 0) or 0),
+            "uncachedInputTokens": max(0, input_total - cached - cache_write),
+            "cacheReadTokens": cached,
+            "cacheWriteTokens": cache_write,
+            "reasoningTokens": int(
+                completion_details.get("reasoning_tokens", 0) or 0
+            ),
+            "reportedCostUsd": reported_cost,
         }
     except httpx.HTTPError as exc:
         raise LLMError(f"No pude conectar con {provider.get('name')}: {exc.__class__.__name__}") from exc

@@ -184,13 +184,13 @@ def test_proveedor_custom_exige_base_url_http():
 def test_health_incluye_la_version_del_proyecto():
     body = client.get("/health").json()
     assert body["ok"] is True
-    assert body["version"] == "0.1.0"
+    assert body["version"] == "0.2.0"
 
 
 def test_agent_card_usa_la_version_del_proyecto():
     create_agent("w1", "writer")
     card = client.get("/agents/w1/.well-known/agent-card.json").json()
-    assert card["version"] == "0.1.0"
+    assert card["version"] == "0.2.0"
     assert card["protocolVersion"] == "0.3.0"
 
 
@@ -408,3 +408,86 @@ def test_chat_completion_de_opencode_go_rutea_modelos_anthropic(monkeypatch):
     assert captured["url"] == llm.OPENCODE_GO_ANTHROPIC_URL
     assert captured["headers"]["x-api-key"] == "oc_sk_test"
     assert "Authorization" not in captured["headers"]
+
+def test_costo_usa_el_catalogo_oficial_por_modelo(monkeypatch):
+    response = client.put(
+        "/providers/gemini-cost",
+        json={
+            "kind": "gemini",
+            "name": "Gemini cost test",
+            "apiKey": "test",
+            "baseUrl": "",
+            "models": ["gemini-2.5-flash"],
+        },
+    )
+    assert response.status_code == 200, response.text
+
+    monkeypatch.setattr(
+        server,
+        "chat_completion",
+        lambda *args, **kwargs: {
+            "text": "ok",
+            "tokensInput": 1_000_000,
+            "tokensOutput": 1_000_000,
+            "uncachedInputTokens": 1_000_000,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0,
+            "reasoningTokens": 0,
+            "reportedCostUsd": None,
+        },
+    )
+    create_agent(
+        "w-cost",
+        "writer",
+        providerId="gemini-cost",
+        model="gemini-2.5-flash",
+    )
+
+    artifact = send_message("w-cost", "Tema").json()["result"]["artifacts"][0]
+    metadata = artifact["metadata"]
+
+    assert metadata["costSource"] == "catalog"
+    assert metadata["costUsd"] == 2.80
+
+
+def test_costo_facturado_por_openrouter_tiene_prioridad(monkeypatch):
+    response = client.put(
+        "/providers/or-cost",
+        json={
+            "kind": "openrouter",
+            "name": "OpenRouter cost test",
+            "apiKey": "test",
+            "baseUrl": "",
+            "models": ["openai/gpt-4o-mini"],
+        },
+    )
+    assert response.status_code == 200, response.text
+
+    monkeypatch.setattr(
+        server,
+        "chat_completion",
+        lambda *args, **kwargs: {
+            "text": "ok",
+            "tokensInput": 120,
+            "tokensOutput": 30,
+            "uncachedInputTokens": 90,
+            "cacheReadTokens": 20,
+            "cacheWriteTokens": 10,
+            "reasoningTokens": 5,
+            "reportedCostUsd": 0.0005,
+        },
+    )
+    create_agent(
+        "w-or-cost",
+        "writer",
+        providerId="or-cost",
+        model="openai/gpt-4o-mini",
+    )
+
+    artifact = send_message("w-or-cost", "Tema").json()["result"]["artifacts"][0]
+    metadata = artifact["metadata"]
+
+    assert metadata["costSource"] == "provider"
+    assert metadata["costUsd"] == 0.0005
+    assert metadata["cacheReadTokens"] == 20
+    assert metadata["reasoningTokens"] == 5

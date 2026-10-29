@@ -7,6 +7,7 @@ import {
 import { agentBaseUrl } from "../lib/a2a";
 import type {
   AgentData,
+  BlankData,
   FlowNode,
   FlowNodeData,
   Provider,
@@ -44,9 +45,11 @@ export function NodeInspector({
             <span className="drawer-sub mono">
               {node.data.kind === "trigger"
                 ? "Trigger manual"
-                : node.data.kind === "writer"
-                  ? `Agente Escritor · /agents/${node.id}`
-                  : `Agente Crítico · /agents/${node.id}`}
+                : node.data.kind === "blank"
+                  ? "Nodo vacío · sin ejecución"
+                  : node.data.kind === "writer"
+                    ? `Agente Escritor · /agents/${node.id}`
+                    : `Agente Crítico · /agents/${node.id}`}
             </span>
           </div>
         </div>
@@ -62,6 +65,13 @@ export function NodeInspector({
 
       {node.data.kind === "trigger" ? (
         <TriggerDrawerBody
+          data={node.data}
+          disabled={disabled}
+          onUpdate={(patch) => onUpdateNode(node.id, patch)}
+          onDelete={() => onDeleteNode(node.id)}
+        />
+      ) : node.data.kind === "blank" ? (
+        <BlankDrawerBody
           data={node.data}
           disabled={disabled}
           onUpdate={(patch) => onUpdateNode(node.id, patch)}
@@ -119,6 +129,63 @@ function TriggerDrawerBody({
           disabled={disabled}
           placeholder="Escribí qué querés que redacte el agente…"
         />
+      </label>
+
+      <footer className="drawer-footer">
+        <button
+          type="button"
+          className="oc-text-btn danger"
+          onClick={onDelete}
+          disabled={disabled}
+        >
+          Eliminar nodo
+        </button>
+      </footer>
+    </div>
+  );
+}
+
+function BlankDrawerBody({
+  data,
+  disabled,
+  onUpdate,
+  onDelete,
+}: {
+  data: BlankData;
+  disabled: boolean;
+  onUpdate: (patch: Partial<BlankData>) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="drawer-body">
+      <div className="oc-card-group">
+        <div className="oc-row">
+          <div className="oc-row-copy">
+            <strong>Nombre</strong>
+            <span>Etiqueta visible en el nodo</span>
+          </div>
+          <input
+            className="oc-input-inline"
+            value={data.name}
+            onChange={(e) => onUpdate({ name: e.target.value })}
+            disabled={disabled}
+          />
+        </div>
+      </div>
+
+      <label className="drawer-field">
+        <span>Nota / contenido del nodo</span>
+        <textarea
+          rows={5}
+          value={data.note}
+          onChange={(e) => onUpdate({ note: e.target.value })}
+          disabled={disabled}
+          placeholder="Qué va a ir acá, o por qué dejás este nodo pendiente…"
+        />
+        <small className="drawer-hint">
+          Los nodos vacíos no se ejecutan: sirven para ordenar el flujo o marcar
+          un paso pendiente entre agentes.
+        </small>
       </label>
 
       <footer className="drawer-footer">

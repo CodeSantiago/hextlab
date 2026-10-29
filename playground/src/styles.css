@@ -334,6 +334,10 @@ pre,
   color: var(--critic-color);
 }
 
+.picker-badge.blank {
+  color: var(--text-secondary);
+}
+
 .picker-copy {
   display: flex;
   flex-direction: column;
@@ -361,6 +365,27 @@ pre,
 
 .canvas-empty-hint p {
   margin: 0;
+}
+
+.canvas-edge-hint {
+  pointer-events: none;
+  background: var(--bg-surface);
+  border: 1px solid var(--divider);
+  border-radius: 7px;
+  padding: 5px 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+.canvas-edge-hint kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--divider-strong);
+  border-radius: 4px;
+  padding: 0 4px;
 }
 
 /* --- Borderless Matte Nodes ---------------------------------------------- */
@@ -394,6 +419,25 @@ pre,
   box-shadow:
     0 0 0 1.5px var(--status-working),
     0 0 24px rgba(97, 175, 239, 0.2);
+}
+
+.blank-node {
+  background: #171614;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.blank-node:hover {
+  background: #1c1b18;
+}
+
+.blank-accent {
+  background: var(--text-muted);
+  opacity: 0.5;
+}
+
+.blank-icon {
+  color: var(--text-secondary);
 }
 
 .node-accent {
@@ -532,6 +576,26 @@ pre,
   stroke-width: 1.6px !important;
 }
 
+.react-flow__edge.selectable:hover .react-flow__edge-path {
+  stroke: #8c8880 !important;
+  stroke-width: 2.1px !important;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent-mint) !important;
+  stroke-width: 2.3px !important;
+}
+
+.react-flow__edgeupdater {
+  fill: transparent;
+  stroke: transparent;
+}
+
+.react-flow__edge.updating .react-flow__edge-path {
+  stroke: var(--accent-mint) !important;
+  stroke-dasharray: 5 4;
+}
+
 .react-flow__edge-textbg {
   fill: #181715 !important;
 }
@@ -616,6 +680,10 @@ pre,
 
 .drawer-dot.kind-critic {
   background: var(--critic-color);
+}
+
+.drawer-dot.kind-blank {
+  background: var(--text-muted);
 }
 
 .drawer-close {
@@ -1398,4 +1466,627 @@ pre,
   color: var(--text-primary);
   font-size: 12px;
   outline: none;
+}
+
+/* --- Projects Sidebar ---------------------------------------------------- */
+
+.topbar-project {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.projects-sidebar {
+  width: 216px;
+  flex-shrink: 0;
+  height: 100%;
+  background: #151412;
+  border-right: 1px solid var(--divider);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.projects-head {
+  height: 42px;
+  padding: 0 10px 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--divider);
+  flex-shrink: 0;
+}
+
+.projects-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.projects-add {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.projects-add:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.projects-add:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.projects-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  outline: none;
+}
+
+.project-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.project-row:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--divider-strong);
+}
+
+.project-row.is-active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.project-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.project-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.project-rename-input {
+  width: 100%;
+  background: var(--bg-base);
+  border: 1px solid var(--divider-strong);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  padding: 2px 5px;
+  outline: none;
+}
+
+.project-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  flex-shrink: 0;
+}
+
+.project-row:hover .project-actions,
+.project-row.is-active .project-actions {
+  opacity: 1;
+}
+
+.project-action {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.project-action:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.project-action.danger:hover:not(:disabled) {
+  color: var(--status-failed);
+}
+
+.project-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.projects-foot {
+  padding: 8px;
+  border-top: 1px solid var(--divider);
+  flex-shrink: 0;
+}
+
+.projects-rubric-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.projects-rubric-btn:hover:not(:disabled) {
+  background: var(--bg-elevated);
+}
+
+.projects-rubric-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.projects-rubric-icon {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--accent-mint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.projects-rubric-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.projects-rubric-copy strong {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.projects-rubric-copy small {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Rubrics Modal ------------------------------------------------------- */
+
+.rubrics-modal {
+  grid-template-columns: minmax(0, 1fr);
+  width: min(900px, 100%);
+  height: min(680px, 90vh);
+}
+
+.rubrics-content {
+  gap: 16px;
+}
+
+.rubric-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rubric-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: 580px;
+  line-height: 1.45;
+}
+
+.rubric-kicker {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.rubric-active-banner {
+  padding: 12px 16px;
+}
+
+.rubric-active-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rubric-active-copy strong {
+  font-size: 13px;
+}
+
+.rubric-active-copy small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.rubric-section {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.rubric-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rubric-section-head h3 {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.rubric-count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.rubric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  gap: 10px;
+}
+
+.rubric-card {
+  background: var(--bg-elevated);
+  border-radius: 9px;
+  padding: 12px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.rubric-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rubric-card-head strong {
+  font-size: 12.5px;
+}
+
+.rubric-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border: 1px solid var(--divider-strong);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+.rubric-card p {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.rubric-criteria-preview {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rubric-criteria-preview li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--divider);
+  padding-top: 3px;
+}
+
+.rubric-criteria-preview em {
+  font-style: normal;
+  color: var(--text-muted);
+}
+
+.rubric-card footer {
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.rubric-empty {
+  margin: 0;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.rubric-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rubric-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: var(--bg-elevated);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.rubric-row.is-active {
+  box-shadow: inset 0 0 0 1px rgba(103, 184, 153, 0.4);
+}
+
+.rubric-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rubric-row-copy strong {
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.rubric-row-copy span {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 480px;
+}
+
+.rubric-active-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-mint);
+  background: rgba(103, 184, 153, 0.1);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.rubric-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.rubric-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rubric-editor-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rubric-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.rubric-input,
+.rubric-field textarea,
+.rubric-criterion textarea {
+  width: 100%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--divider);
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  outline: none;
+  resize: vertical;
+}
+
+.rubric-input:focus,
+.rubric-field textarea:focus,
+.rubric-criterion textarea:focus {
+  border-color: var(--divider-strong);
+}
+
+.rubric-criteria-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.rubric-criteria {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rubric-criterion {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-elevated);
+  border-radius: 8px;
+  padding: 10px 11px;
+}
+
+.rubric-criterion-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.rubric-criterion-top .rubric-input {
+  flex: 1;
+  background: var(--bg-base);
+}
+
+.rubric-criterion-index {
+  width: 18px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  flex-shrink: 0;
+}
+
+.rubric-weight {
+  width: 54px;
+  background: var(--bg-base);
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  padding: 7px 6px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: center;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.rubric-weight-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.rubric-criterion textarea {
+  background: var(--bg-base);
+  font-size: 12px;
+}
+
+.rubric-error {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--status-failed);
+}
+
+.rubric-editor-footer {
+  position: sticky;
+  bottom: -22px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 -26px -22px;
+  padding: 12px 26px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--divider);
+}
+
+.rubric-editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* --- Loop Level Control -------------------------------------------------- */
+
+.oc-level-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.oc-level-hint {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  text-align: right;
+  max-width: 250px;
+}
+
+.oc-pricing-note {
+  margin: 0;
+  max-width: 620px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.trace-token-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 10.5px;
+  color: var(--text-muted);
 }

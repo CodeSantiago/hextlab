@@ -27,8 +27,10 @@ DEFAULT_INSTRUCTIONS = {
 # cliente necesita un JSON estable para decidir si el loop sigue o corta.
 CRITIC_OUTPUT_CONTRACT = (
     "Respondé SOLO con JSON válido con esta forma: "
-    '{"approved": bool, "scores": {"claridad": 1-5, "precision": 1-5, "tono": 1-5}, '
-    '"observations": ["..."], "summary": "..."}'
+    '{"approved": bool, "scores": {"<criterio>": 1-5}, '
+    '"observations": ["..."], "summary": "..."}. '
+    "Usá como claves de 'scores' los criterios de la rúbrica; "
+    "si no hay rúbrica, usá claridad, precision y tono."
 )
 
 SKILLS = {

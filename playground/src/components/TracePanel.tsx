@@ -2,8 +2,15 @@ import { useState } from "react";
 import { STATUS_COLORS, toAgentStatus } from "../lib/status";
 import type { RunResult, TraceStep } from "../types";
 
+const COST_SOURCE_LABELS: Record<TraceStep["costSource"], string> = {
+  provider: "facturado",
+  catalog: "oficial",
+  local: "local",
+  manual: "estimado",
+};
+
 function formatCost(value: number): string {
-  return `$${value.toFixed(5)}`;
+  return `$${value.toFixed(6)}`;
 }
 
 export function TracePanel({
@@ -48,6 +55,13 @@ export function TracePanel({
     0,
   );
   const totalCost = steps.reduce((sum, s) => sum + s.cost, 0);
+  const costSources = [...new Set(steps.map((step) => step.costSource))];
+  const costSourceLabel =
+    costSources.length === 0
+      ? ""
+      : costSources.length === 1
+        ? COST_SOURCE_LABELS[costSources[0]]
+        : "mixto";
 
   return (
     <aside className="trace-sidebar" id="trace-panel">
@@ -150,7 +164,12 @@ export function TracePanel({
                 </span>
                 <span>{lastRun.iterations} iter</span>
                 <span>{lastRun.totalTokens} tok</span>
-                <span>{formatCost(lastRun.totalCost)}</span>
+                <span
+                  title={`Fuente del costo: ${costSourceLabel || "sin datos"}`}
+                >
+                  {formatCost(lastRun.totalCost)}
+                  {costSourceLabel ? ` · ${costSourceLabel}` : ""}
+                </span>
               </div>
             </section>
           )}
@@ -182,12 +201,31 @@ export function TracePanel({
                       {step.tokensInput}→{step.tokensOutput} tok
                     </span>
                     <span>{step.clientLatencyMs.toFixed(0)}ms</span>
-                    <span>{formatCost(step.cost)}</span>
+                    <span
+                      title={`Fuente del costo: ${COST_SOURCE_LABELS[step.costSource]}`}
+                    >
+                      {formatCost(step.cost)} ·{" "}
+                      {COST_SOURCE_LABELS[step.costSource]}
+                    </span>
                     {step.model && <span>{step.model}</span>}
                   </div>
                 </summary>
 
                 <div className="trace-item-body">
+                  <div className="trace-token-line mono">
+                    <span>input {step.tokensInput}</span>
+                    <span>output {step.tokensOutput}</span>
+                    {step.cacheReadTokens > 0 && (
+                      <span>cache read {step.cacheReadTokens}</span>
+                    )}
+                    {step.cacheWriteTokens > 0 && (
+                      <span>cache write {step.cacheWriteTokens}</span>
+                    )}
+                    {step.reasoningTokens > 0 && (
+                      <span>reasoning {step.reasoningTokens}</span>
+                    )}
+                  </div>
+
                   {step.review && (
                     <div className="trace-review">
                       <div className="trace-scores mono">

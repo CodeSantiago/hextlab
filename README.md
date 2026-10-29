@@ -1,7 +1,7 @@
 # HextLab · A2A Agent Studio
 
 [![CI](https://github.com/CodeSantiago/hextlab/actions/workflows/ci.yml/badge.svg)](https://github.com/CodeSantiago/hextlab/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.1.0-67b899)](https://github.com/CodeSantiago/hextlab/releases)
+[![Version](https://img.shields.io/badge/version-0.2.0-67b899)](https://github.com/CodeSantiago/hextlab/releases)
 [![License](https://img.shields.io/badge/license-MIT-67b899)](LICENSE)
 [![Status](https://img.shields.io/badge/status-alpha-e5c07b)](#estado-actual)
 
@@ -21,21 +21,24 @@ Trigger manual → Writer Agent ↔ Critic Agent
 | | |
 | --- | --- |
 | Repositorio | [CodeSantiago/hextlab](https://github.com/CodeSantiago/hextlab) |
-| Versión | **0.1.0** (alpha, local-first) |
+| Versión | **0.2.0** (alpha, local-first) |
 | Protocolo | **A2A v0.3.0** (legacy; v1.0 está en el roadmap) |
 | Backend | Python 3.11+ · FastAPI · httpx |
 | Frontend | React 19 · TypeScript 5.9 · Vite 7 · `@xyflow/react` |
-| Tests | 25 backend (`pytest`) + 5 frontend (`vitest`) |
+| Tests | 33 backend (`pytest`) + 5 frontend (`vitest`) |
 | Licencia | MIT |
 
 ## Qué incluye
 
-- **Canvas interactivo** con nodos **Trigger**, **Agente Escritor** y **Agente Crítico**. Podés crear, conectar, mover y borrar nodos, o restaurar la plantilla base.
+- **Proyectos**: sidebar con múltiples flujos independientes. El **+** crea un proyecto nuevo, doble clic (o el lápiz) lo renombra y la **×** lo elimina; cada proyecto conserva su canvas y su rúbrica.
+- **Rúbricas**: biblioteca con 4 plantillas listas para copiar y rúbricas personalizadas con criterios y pesos. La rúbrica activa del proyecto se inyecta en el system prompt de los agentes críticos al correr.
+- **Canvas interactivo** con nodos **Trigger**, **Agente Escritor**, **Agente Crítico** y **nodos vacíos**. Podés crear, conectar, reconectar cables (arrastrando un extremo), borrarlos y restaurar la plantilla base.
 - **Agent Host dinámico A2A v0.3.0** (`agents/host/server.py`, puerto 8000): cada nodo agente se registra como un agente A2A independiente con su Agent Card y su endpoint JSON-RPC.
 - **Configuración por nodo**: nombre, instrucciones (system prompt), proveedor, modelo y temperatura. El selector de modelo agrupa los modelos de todos los proveedores configurados.
 - **Proveedores y API keys** desde **Settings → Providers**: OpenCode Go, OpenAI, Anthropic, Google Gemini, Groq, OpenRouter, Ollama y cualquier endpoint compatible con OpenAI. El proveedor **Mock (sin red)** viene integrado y es el default.
 - **OpenCode Go**: alta con `oc_sk_...`; al guardar se consulta el catálogo real y se cargan los modelos soportados. Se rutean las APIs `chat/completions`, `/responses` y `/messages` según el modelo.
 - **Panel Activity**: trazas por paso con request/response JSON-RPC, prompt, output, puntajes del crítico, tokens, latencia y costo; pestaña **Compare** entre corridas; tarjeta de **Resultado final** con botón de copiar.
+- **Costos**: OpenRouter devuelve el costo facturado por request; Gemini, GPT, Claude y Llama usan tarifas oficiales por modelo; el resto usa la tarifa manual de Settings. Los tokens reales los informa cada proveedor y en Mock se estiman.
 - **Cancelación de runs**: mientras corre, el botón **Run** se convierte en **Cancelar**.
 - **Modo Mock determinístico** para probar el loop completo sin API key.
 
@@ -46,7 +49,7 @@ A2A es el protocolo Agent2Agent creado por Google y hoy gobernado por la Agentic
 - El **cliente** (el navegador) actúa como orquestador y llama a cada agente con `message/send`.
 - Los agentes **no se hablan directamente entre sí**; son independientes y opacos.
 - Cada agente publica su **Agent Card** en `/.well-known/agent-card.json` y acepta **JSON-RPC 2.0**.
-- El loop reutiliza el `contextId` y sigue la arista `rehacer` hasta aprobación o `maxIterations`.
+- El loop reutiliza el `contextId` y sigue la arista `rehacer` hasta aprobación o agotar el nivel de procesamiento configurado (Low, Default, High, Max, Extra max).
 
 Las llamadas a OpenCode Go/OpenAI/etc. son **internas de cada agente**; no forman parte de A2A.
 
@@ -216,6 +219,7 @@ El CI de GitHub Actions corre esos comandos en cada push y PR.
 
 El historial completo está en [`CHANGELOG.md`](CHANGELOG.md). Resumen:
 
+- **0.2.0** (2026-10-29): proyectos múltiples, rúbricas con plantillas y personalizadas, nodos vacíos, reconexión de cables, niveles de procesamiento del loop y costos reales por modelo/proveedor.
 - **0.1.0** (2026-10-25): primera versión pública. Canvas A2A, Agent Host dinámico, Mock, OpenCode Go y proveedores, panel Activity, cancelación de runs, tests, lint y CI.
 
 ## Contribuir

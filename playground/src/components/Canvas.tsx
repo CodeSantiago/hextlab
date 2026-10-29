@@ -6,8 +6,11 @@ import {
   Panel,
   ReactFlow,
   addEdge,
+  reconnectEdge,
   type Connection,
   type EdgeChange,
+  type FinalConnectionState,
+  type HandleType,
   type NodeChange,
   type NodeTypes,
 } from "@xyflow/react";
@@ -22,15 +25,30 @@ import type {
 } from "../types";
 import { newId } from "../lib/id";
 import { AgentNode } from "./AgentNode";
+import { BlankNode } from "./BlankNode";
 import { TriggerNode } from "./TriggerNode";
 
 const nodeTypes: NodeTypes = {
   trigger: TriggerNode,
   writer: AgentNode,
   critic: AgentNode,
+  blank: BlankNode,
 };
 
+function styleEdge(edge: FlowEdge): FlowEdge {
+  const isLoop =
+    edge.sourceHandle === "loop-out" || edge.targetHandle === "loop-in";
+  return {
+    ...edge,
+    label: isLoop ? "rehacer" : undefined,
+    type: isLoop ? "smoothstep" : "default",
+    markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
+    interactionWidth: 26,
+  };
+}
+
 type CanvasProps = {
+  flowKey: string;
   nodes: FlowNode[];
   edges: FlowEdge[];
   statuses: Record<string, AgentStatus>;
@@ -48,6 +66,7 @@ type CanvasProps = {
 };
 
 export function Canvas({
+  flowKey,
   nodes,
   edges,
   statuses,
@@ -78,22 +97,22 @@ export function Canvas({
       nodes.map((node) => {
         const status = statuses[node.id] ?? "idle";
         const selected = node.id === selectedNodeId;
-        if (node.data.kind === "trigger") {
+        if (node.data.kind === "writer" || node.data.kind === "critic") {
           return {
             ...node,
             selected,
-            data: { ...node.data, status },
+            data: {
+              ...node.data,
+              status,
+              providerName:
+                providerMap.get(node.data.providerId) ?? node.data.providerId,
+            },
           };
         }
         return {
           ...node,
           selected,
-          data: {
-            ...node.data,
-            status,
-            providerName:
-              providerMap.get(node.data.providerId) ?? node.data.providerId,
-          },
+          data: { ...node.data, status },
         };
       }),
     [nodes, statuses, selectedNodeId, providerMap],
@@ -102,7 +121,7 @@ export function Canvas({
   const decoratedEdges = useMemo(
     () =>
       edges.map((edge) => ({
-        ...edge,
+        ...styleEdge(edge),
         animated: running,
       })),
     [edges, running],
@@ -110,22 +129,40 @@ export function Canvas({
 
   function handleConnect(connection: Connection) {
     if (!connection.source || !connection.target) return;
-    const isLoop =
-      connection.sourceHandle === "loop-out" ||
-      connection.targetHandle === "loop-in";
-
     onSetEdges((eds) =>
       addEdge(
-        {
+        styleEdge({
           ...connection,
           id: `e-${connection.source}-${connection.target}-${newId().slice(0, 5)}`,
-          label: isLoop ? "rehacer" : undefined,
-          type: isLoop ? "smoothstep" : "default",
-          markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
-        },
+        }),
         eds,
       ),
     );
+  }
+
+  function handleReconnect(oldEdge: FlowEdge, connection: Connection) {
+    if (!connection.source || !connection.target) return;
+    onSetEdges((eds) =>
+      reconnectEdge(oldEdge, connection, eds, {
+        shouldReplaceId: false,
+      }).map(styleEdge),
+    );
+  }
+
+  function handleReconnectEnd(
+    event: MouseEvent | TouchEvent,
+    edge: FlowEdge,
+    handleType: HandleType,
+    connectionState: FinalConnectionState,
+  ) {
+    void event;
+    void handleType;
+    if (connectionState.isValid) return;
+    onSetEdges((eds) => eds.filter((item) => item.id !== edge.id));
+  }
+
+  function handleRemoveEdge(edge: FlowEdge) {
+    onSetEdges((eds) => eds.filter((item) => item.id !== edge.id));
   }
 
   function pickKind(kind: NodeKind) {
@@ -136,11 +173,16 @@ export function Canvas({
   return (
     <div className="canvas">
       <ReactFlow
+        key={flowKey}
         nodes={decoratedNodes}
         edges={decoratedEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={handleConnect}
+        onReconnect={handleReconnect}
+        onReconnectEnd={handleReconnectEnd}
+        onEdgeDoubleClick={(_, edge) => handleRemoveEdge(edge)}
+        reconnectRadius={18}
         onNodeClick={(_, node) => onSelectNode(node.id)}
         onPaneClick={() => {
           onSelectNode(null);
@@ -228,6 +270,20 @@ export function Canvas({
                     </small>
                   </span>
                 </button>
+
+                <button
+                  type="button"
+                  className="picker-option"
+                  onClick={() => pickKind("blank")}
+                >
+                  <span className="picker-badge blank">·</span>
+                  <span className="picker-copy">
+                    <strong>Nodo vacío</strong>
+                    <small>
+                      Marcador sin ejecución; puede ir entre agentes como puente
+                    </small>
+                  </span>
+                </button>
               </div>
             )}
           </div>
@@ -261,6 +317,13 @@ export function Canvas({
             </p>
           </Panel>
         )}
+
+        <Panel position="bottom-center" className="canvas-edge-hint">
+          <span>
+            Cable: arrastrá un extremo para reconectar · doble clic o{" "}
+            <kbd>Supr</kbd> para borrarlo
+          </span>
+        </Panel>
       </ReactFlow>
     </div>
   );

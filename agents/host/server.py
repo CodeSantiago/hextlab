@@ -27,6 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
+from agents.common import pricing
 from agents.common.a2a import (
     PARSE_ERROR,
     build_artifact,
@@ -157,6 +158,11 @@ def run_agent(agent_id: str, config: AgentConfig, message: dict[str, Any]) -> di
             mode, estimated = "mock", True
             tokens_input = estimate_tokens(f"{system_prompt}\n{user_text}")
             tokens_output = estimate_tokens(raw)
+            uncached_input = tokens_input
+            cache_read = 0
+            cache_write = 0
+            reasoning_tokens = 0
+            reported_cost = None
         else:
             if not config.model or config.model == MOCK_PROVIDER_ID:
                 raise LLMError("El nodo no tiene un modelo real elegido.")
@@ -172,6 +178,30 @@ def run_agent(agent_id: str, config: AgentConfig, message: dict[str, Any]) -> di
             mode, estimated = "llm", False
             tokens_input = completion["tokensInput"]
             tokens_output = completion["tokensOutput"]
+            uncached_input = completion.get("uncachedInputTokens", tokens_input)
+            cache_read = completion.get("cacheReadTokens", 0)
+            cache_write = completion.get("cacheWriteTokens", 0)
+            reasoning_tokens = completion.get("reasoningTokens", 0)
+            reported_cost = completion.get("reportedCostUsd")
+
+        cost_usd = None
+        cost_source = None
+        if mode == "llm":
+            if reported_cost is not None:
+                cost_usd = reported_cost
+                cost_source = "provider"
+            elif provider["kind"] == "ollama":
+                cost_usd = 0.0
+                cost_source = "local"
+            else:
+                cost_usd = pricing.estimate_cost(
+                    config.model,
+                    uncached_input=uncached_input,
+                    cache_read=cache_read,
+                    cache_write=cache_write,
+                    output=tokens_output,
+                )
+                cost_source = "catalog" if cost_usd is not None else None
 
         if config.role == "critic":
             review = roles.parse_review(raw)
@@ -195,6 +225,12 @@ def run_agent(agent_id: str, config: AgentConfig, message: dict[str, Any]) -> di
             "model": config.model if mode == "llm" else "mock",
             "tokensInput": tokens_input,
             "tokensOutput": tokens_output,
+            "cacheReadTokens": cache_read,
+            "cacheWriteTokens": cache_write,
+            "reasoningTokens": reasoning_tokens,
+            "costUsd": cost_usd,
+            "costSource": cost_source,
+            "reportedCostUsd": reported_cost,
             "latencyMs": latency_ms,
             "systemPrompt": system_prompt,
         },

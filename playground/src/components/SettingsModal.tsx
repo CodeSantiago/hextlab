@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { HOST_URL } from "../config";
+import { HOST_URL, LOOP_LEVELS, loopLevelForIterations } from "../config";
 import { deleteProvider, fetchProviderModels, saveProvider } from "../lib/host";
 import { newId } from "../lib/id";
 import type {
@@ -91,6 +91,7 @@ export function SettingsModal({
     type: "ok" | "err";
     text: string;
   } | null>(null);
+  const selectedLoopLevel = loopLevelForIterations(maxIterations);
 
   if (!open) return null;
 
@@ -441,25 +442,31 @@ export function SettingsModal({
               <div className="oc-card-group">
                 <div className="oc-row">
                   <div className="oc-row-copy">
-                    <strong>Máximo de iteraciones del loop</strong>
+                    <strong>Nivel de procesamiento del loop</strong>
                     <span>
-                      Límite de vueltas entre Escritor y Crítico antes de cortar
-                      la ejecución
+                      Cuánto puede insistir el crítico antes de cortar. Más
+                      nivel, más reescrituras y más consumo de tokens y tiempo.
                     </span>
                   </div>
-                  <select
-                    className="oc-select-inline"
-                    value={maxIterations}
-                    onChange={(e) =>
-                      onMaxIterationsChange(Number(e.target.value))
-                    }
-                  >
-                    {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => (
-                      <option key={n} value={n}>
-                        {n} {n === 3 ? "(Default)" : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="oc-level-control">
+                    <select
+                      className="oc-select-inline"
+                      value={maxIterations}
+                      onChange={(e) =>
+                        onMaxIterationsChange(Number(e.target.value))
+                      }
+                      aria-label="Nivel de procesamiento del loop"
+                    >
+                      {LOOP_LEVELS.map((level) => (
+                        <option key={level.id} value={level.iterations}>
+                          {level.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="oc-level-hint">
+                      {selectedLoopLevel.description}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="oc-row">
@@ -502,16 +509,16 @@ export function SettingsModal({
 
                 <div className="oc-row">
                   <div className="oc-row-copy">
-                    <strong>Precio estimado Input (USD / 1K tokens)</strong>
+                    <strong>Tarifa manual Input (USD / 1K tokens)</strong>
                     <span>
-                      Usado en el panel de trazas para estimar el costo de
-                      entrada
+                      Fallback para modelos sin tarifa oficial o Mock.
+                      Referencia: Gemini 2.5 Flash.
                     </span>
                   </div>
                   <input
                     type="number"
                     min={0}
-                    step={0.0005}
+                    step={0.0001}
                     className="oc-input-inline mono"
                     value={pricing.inputPer1K}
                     onChange={(e) =>
@@ -525,16 +532,16 @@ export function SettingsModal({
 
                 <div className="oc-row">
                   <div className="oc-row-copy">
-                    <strong>Precio estimado Output (USD / 1K tokens)</strong>
+                    <strong>Tarifa manual Output (USD / 1K tokens)</strong>
                     <span>
-                      Usado en el panel de trazas para estimar el costo de
-                      salida
+                      Fallback para modelos sin tarifa oficial o Mock.
+                      Referencia: Gemini 2.5 Flash.
                     </span>
                   </div>
                   <input
                     type="number"
                     min={0}
-                    step={0.0005}
+                    step={0.0001}
                     className="oc-input-inline mono"
                     value={pricing.outputPer1K}
                     onChange={(e) =>
@@ -546,6 +553,14 @@ export function SettingsModal({
                   />
                 </div>
               </div>
+
+              <p className="oc-pricing-note">
+                Tokens: los informa el proveedor de cada agente; en Mock se
+                estiman de forma aproximada. Costos: OpenRouter devuelve el
+                costo facturado por request; los modelos del catálogo (Gemini,
+                GPT, Claude, Llama) usan tarifa oficial; el resto usa la tarifa
+                manual de arriba. No se cobra nada ni afecta la ejecución.
+              </p>
             </>
           )}
 

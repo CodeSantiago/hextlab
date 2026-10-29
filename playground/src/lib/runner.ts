@@ -1,4 +1,4 @@
-﻿import {
+import {
   agentBaseUrl,
   buildMessagePayload,
   dataFromTask,
@@ -8,7 +8,11 @@
   statusMessageFromTask,
   textFromTask,
 } from "./a2a";
-import { MOCK_PROVIDER_ID, REWRITE_MARKERS } from "../config";
+import {
+  MOCK_PROVIDER_ID,
+  REWRITE_MARKERS,
+  loopLevelForIterations,
+} from "../config";
 import { syncFlowAgents } from "./host";
 import { newId } from "./id";
 import { toAgentStatus } from "./status";
@@ -16,6 +20,7 @@ import type {
   AgentCard,
   AgentData,
   AgentStatus,
+  CostSource,
   FlowEdge,
   FlowNode,
   Pricing,
@@ -53,7 +58,21 @@ function buildStep(args: {
   const metadata = metadataFromTask(args.task);
   const tokensInput = Number(metadata.tokensInput ?? 0);
   const tokensOutput = Number(metadata.tokensOutput ?? 0);
+  const cacheReadTokens = Number(metadata.cacheReadTokens ?? 0);
+  const cacheWriteTokens = Number(metadata.cacheWriteTokens ?? 0);
+  const reasoningTokens = Number(metadata.reasoningTokens ?? 0);
   const serverLatencyMs = Number(metadata.latencyMs ?? args.clientLatencyMs);
+  const backendCost =
+    typeof metadata.costUsd === "number" && Number.isFinite(metadata.costUsd)
+      ? metadata.costUsd
+      : null;
+  const backendSource = metadata.costSource;
+  const costSource: CostSource =
+    backendCost !== null
+      ? backendSource === "provider" || backendSource === "local"
+        ? backendSource
+        : "catalog"
+      : "manual";
 
   return {
     id: newId(),
@@ -76,9 +95,13 @@ function buildStep(args: {
     error: args.error,
     tokensInput,
     tokensOutput,
+    cacheReadTokens,
+    cacheWriteTokens,
+    reasoningTokens,
     serverLatencyMs,
     clientLatencyMs: args.clientLatencyMs,
-    cost: costOf(tokensInput, tokensOutput, args.pricing),
+    cost: backendCost ?? costOf(tokensInput, tokensOutput, args.pricing),
+    costSource,
     estimated: Boolean(metadata.estimated),
     timestamp: new Date().toISOString(),
   };
@@ -108,9 +131,13 @@ function buildFailedStep(args: {
     error: args.error,
     tokensInput: 0,
     tokensOutput: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningTokens: 0,
     serverLatencyMs: args.clientLatencyMs,
     clientLatencyMs: args.clientLatencyMs,
     cost: 0,
+    costSource: "manual",
     estimated: true,
     timestamp: new Date().toISOString(),
   };
@@ -120,14 +147,30 @@ function findNextNode(
   fromId: string,
   nodes: FlowNode[],
   edges: FlowEdge[],
-  preferLoopHandle = false,
+  kind: "forward" | "loop" = "forward",
 ): FlowNode | undefined {
-  const candidates = edges.filter((edge) => edge.source === fromId);
-  const chosen = preferLoopHandle
-    ? (candidates.find((e) => e.sourceHandle === "loop-out") ?? candidates[0])
-    : (candidates.find((e) => e.sourceHandle !== "loop-out") ?? candidates[0]);
-  if (!chosen) return undefined;
-  return nodes.find((node) => node.id === chosen.target);
+  const visited = new Set<string>([fromId]);
+  let currentId = fromId;
+  let currentKind: "forward" | "loop" = kind;
+
+  while (true) {
+    const candidates = edges.filter((edge) => edge.source === currentId);
+    const chosen = candidates.find((edge) =>
+      currentKind === "loop"
+        ? edge.sourceHandle === "loop-out"
+        : edge.sourceHandle !== "loop-out",
+    );
+    if (!chosen) return undefined;
+
+    const target = nodes.find((node) => node.id === chosen.target);
+    if (!target) return undefined;
+    if (target.data.kind !== "blank") return target;
+    if (visited.has(target.id)) return undefined;
+
+    visited.add(target.id);
+    currentId = target.id;
+    currentKind = "forward";
+  }
 }
 
 export interface RunFlowCallbacks {
@@ -181,7 +224,7 @@ export async function executeFlow(args: {
   const firstNode = findNextNode(trigger.id, nodes, edges);
   if (!firstNode || firstNode.data.kind === "trigger") {
     throw new Error(
-      "ConectÃ¡ la salida del Trigger a un agente (Escritor o CrÃ­tico).",
+      "Conectá la salida del Trigger a un agente (Escritor o Crítico).",
     );
   }
 
@@ -224,14 +267,17 @@ export async function executeFlow(args: {
     const maxSteps =
       Math.max(1, maxIterations) * Math.max(1, nodes.length) + nodes.length;
 
-    while (currentNode && currentNode.data.kind !== "trigger") {
+    while (
+      currentNode &&
+      (currentNode.data.kind === "writer" || currentNode.data.kind === "critic")
+    ) {
       if (signal?.aborted) {
         throw new Error("Run cancelado.");
       }
       guardSteps += 1;
       if (guardSteps > maxSteps) {
         throw new Error(
-          "El flujo superÃ³ el lÃ­mite de pasos por posibles ciclos.",
+          "El flujo superó el límite de pasos por posibles ciclos.",
         );
       }
 
@@ -253,7 +299,7 @@ export async function executeFlow(args: {
                 .map((obs) => `- ${obs}`)
                 .join(
                   "\n",
-                )}\n\nReescribÃ­ el borrador incorporando las observaciones.`
+                )}\n\nReescribí el borrador incorporando las observaciones.`
           : draft || initialInput;
 
       emit.onStatusChange(agentNode.id, "working");
@@ -274,7 +320,7 @@ export async function executeFlow(args: {
         if (task.status.state !== "completed") {
           const reason =
             statusMessageFromTask(task) ||
-            `El agente terminÃ³ en estado "${task.status.state}".`;
+            `El agente terminó en estado "${task.status.state}".`;
           const step = buildStep({
             node: agentNode,
             iteration,
@@ -310,10 +356,10 @@ export async function executeFlow(args: {
           recorded = true;
 
           if (!draft.trim()) {
-            throw new Error("El escritor no devolviÃ³ texto.");
+            throw new Error("El escritor no devolvió texto.");
           }
 
-          const next = findNextNode(agentNode.id, nodes, edges, false);
+          const next = findNextNode(agentNode.id, nodes, edges);
           if (!next) {
             approved = true;
             emit.onStatusChange(trigger.id, "completed");
@@ -324,7 +370,7 @@ export async function executeFlow(args: {
               approved: true,
               iterations: iteration,
               status: "completed",
-              message: "Borrador generado (sin nodo crÃ­tico conectado).",
+              message: "Borrador generado (sin nodo crítico conectado).",
               steps: allSteps,
             });
           }
@@ -349,18 +395,16 @@ export async function executeFlow(args: {
 
           if (!review) {
             throw new Error(
-              "El crÃ­tico no devolviÃ³ el data part con la revisiÃ³n.",
+              "El crítico no devolvió el data part con la revisión.",
             );
           }
 
           observations = review.observations ?? [];
           if (review.approved) {
             approved = true;
-            const forward = edges.find(
-              (e) => e.source === agentNode.id && e.sourceHandle === "out",
-            );
-            if (forward) {
-              currentNode = nodes.find((n) => n.id === forward.target);
+            const next = findNextNode(agentNode.id, nodes, edges);
+            if (next) {
+              currentNode = next;
               continue;
             }
             emit.onStatusChange(trigger.id, "completed");
@@ -371,13 +415,13 @@ export async function executeFlow(args: {
               approved: true,
               iterations: iteration,
               status: "completed",
-              message: `Aprobado por ${agentNode.data.name} en la iteraciÃ³n ${iteration}.`,
+              message: `Aprobado por ${agentNode.data.name} en la iteración ${iteration}.`,
               steps: allSteps,
             });
           }
 
-          // No aprobado: buscamos arista de loop o revisamos lÃ­mite de iteraciones.
-          const loopTarget = findNextNode(agentNode.id, nodes, edges, true);
+          // No aprobado: buscamos arista de loop o revisamos límite de iteraciones.
+          const loopTarget = findNextNode(agentNode.id, nodes, edges, "loop");
           if (!loopTarget || iteration >= maxIterations) {
             emit.onStatusChange(trigger.id, "failed");
             return summarizeResult({
@@ -389,8 +433,8 @@ export async function executeFlow(args: {
               status: "failed",
               message:
                 iteration >= maxIterations
-                  ? `Se alcanzÃ³ MAX_ITERATIONS (${maxIterations}) sin aprobaciÃ³n del crÃ­tico.`
-                  : "El crÃ­tico rechazÃ³ el borrador y no hay conexiÃ³n de 'rehacer' hacia un escritor.",
+                  ? `Se alcanzó el nivel ${loopLevelForIterations(maxIterations).label} sin aprobación del crítico.`
+                  : "El crítico rechazó el borrador y no hay conexión de 'rehacer' hacia un escritor.",
               steps: allSteps,
             });
           }
@@ -426,7 +470,7 @@ export async function executeFlow(args: {
       status: approved ? "completed" : "failed",
       message: approved
         ? "Flujo completado."
-        : "El flujo terminÃ³ sin aprobaciÃ³n.",
+        : "El flujo terminó sin aprobación.",
       steps: allSteps,
     });
   } catch (err) {
@@ -439,7 +483,7 @@ export async function executeFlow(args: {
       approved: false,
       iterations: iteration,
       status: "failed",
-      message: signal?.aborted ? "Run cancelado." : `El run fallÃ³: ${message}`,
+      message: signal?.aborted ? "Run cancelado." : `El run falló: ${message}`,
       steps: allSteps,
     });
   }
